@@ -63,7 +63,7 @@ static void show_usage()
 		 "  -v <level>    Verbosity (0 to 3 - Default is 3)\n\n");
 }
 
-void print_approximate_size(unsigned int value) {
+void print_byte_size(unsigned long value) {
     const char *suffixes[] = {"B", "KB", "MB", "GB"};
     double bytes = (double)value;
     int suffix_index = 0;
@@ -72,9 +72,9 @@ void print_approximate_size(unsigned int value) {
         bytes /= 1024;
         suffix_index++;
     }
-
-    printf("%.2f %s\n", bytes, suffixes[suffix_index]);
+    printf("%.4f %s\n", bytes, suffixes[suffix_index]);
 }
+
 
 int main(int argc, char *argv[])
 {
@@ -188,7 +188,8 @@ int main(int argc, char *argv[])
 		}
 		
 		
-		status = read(fd, &dev->phys, 4);
+		// status = read(fd, &dev->phys, 4);
+		status = read(fd, &dev->phys, 8);
 		if (status < 0) {
 			printf("Error: configuration space read failed\n");
 			close(fd);
@@ -200,6 +201,32 @@ int main(int argc, char *argv[])
 	}
 
 
+	int mem_fd;
+    void *mem_ptr;
+	unsigned long aim_pa_base, aim_pa = (unsigned long)(dev->phys)&0xfffffffffffffff0;
+	unsigned long aim_mem_size, target_mem_size;
+	
+	aim_pa_base = (unsigned long)(dev->phys)&0xfffffffffffffff0;
+	aim_pa = aim_pa_base + AIM_RESERVED_OFFSET;
+	aim_mem_size = (dev->size) - AIM_RESERVED_OFFSET;
+	// target_mem_size = aim_mem_size;
+	target_mem_size = 1024 * 1024 * 1024;
+	
+
+    mem_fd = open(MEM_DEVICE, O_RDWR | O_SYNC);
+    if (mem_fd == -1) {
+        perror("Failed to open /dev/mem");
+        exit(EXIT_FAILURE);
+    }
+
+    mem_ptr = mmap(NULL, target_mem_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, mem_fd, aim_pa);
+    if (mem_ptr == MAP_FAILED) {
+        perror("Failed to map memory");
+        close(mem_fd);
+        exit(EXIT_FAILURE);
+    }
+
+
 	if (verbosity >= 3)
 	{
 		printf("\n");
@@ -207,70 +234,45 @@ int main(int argc, char *argv[])
 		printf("---------\n\n");
 		printf(" - Accessing BAR%d\n", dev->bar);
 		printf(" - Region size is %lu-bytes\n", dev->size);
-		// printf(" - offset into region is %d-bytes\n", dev->offset);
-        
-        printf(" - Memory-mapped Virtual Address: %p\n", dev->maddr);
-        printf(" - PCI Physical Address: 0x%x\n", (dev->phys)&0xfffffffffffffff0);
-        
-
+        printf(" - PCI Physical Address: 0x%lx\n", (dev->phys)&0xfffffffffffffff0);
 	verbosity==1?printf("\nAccessing BAR%d\n", dev->bar):0;
 	}
 
-	/* ------------------------------------------------------------
-	 * Tests
-	 * ------------------------------------------------------------
-	 */
-
-
-	int mem_fd;
-    void *mem_ptr;
-	unsigned long aim_pa_base, aim_pa = (unsigned long)(dev->phys)&0xfffffffffffffff0;
-	unsigned long aim_mem_size;
-	
-	aim_pa_base = (unsigned long)(dev->phys)&0xfffffffffffffff0;
-	aim_pa = aim_pa_base + AIM_RESERVED_OFFSET;
-	aim_mem_size = (dev->size) - AIM_RESERVED_OFFSET;
 
 	printf("\n");
 	printf("Memory read/write test\n");
 	printf("---------\n\n");
 	printf(" - AiM memory size(bytes): ");
-	print_approximate_size(aim_mem_size);
-    printf(" - AiM Physical address space: 0x%x ~ 0x%x\n", aim_pa, aim_pa + aim_mem_size);
-    
-
-    // mem_fd = open(MEM_DEVICE, O_RDWR | O_SYNC);
-    // if (mem_fd == -1) {
-    //     perror("Failed to open /dev/mem");
-    //     exit(EXIT_FAILURE);
-    // }
-    // mem_ptr = mmap(NULL, aim_mem_size, PROT_READ | PROT_WRITE, MAP_SHARED, mem_fd, aim_pa);
-    // if (mem_ptr == MAP_FAILED) {
-    //     perror("Failed to map memory");
-    //     close(mem_fd);
-    //     exit(EXIT_FAILURE);
-    // }
-
-	// memset(mem_ptr, 0, aim_mem_size);
-    // for (int i = 0; i < aim_mem_size; i += sizeof(int)) {
-    //     int *addr = (int *)((char *)mem_ptr + i);
-    //     *addr = MAGIC_NUMBER;
-    // }
-    // for (int i = 0; i < aim_mem_size; i += sizeof(int)) {
-    //     int *addr = (int *)((char *)mem_ptr + i);
-    //     int value_read = *addr;
-        
-    //     if (value_read == MAGIC_NUMBER) {
-    //         // printf("Data verification successful at address %p. Value read: 0x%X\n", addr, value_read);
-    //     } else {
-    //         printf("Data verification failed at address %p. Expected: 0x%X, Read: 0x%X\n", addr, MAGIC_NUMBER, value_read);
-	// 		break;
-    //     }
-    // }
+	print_byte_size(aim_mem_size);
+	printf(" - AiM virtual address space: %p ~ %p\n", mem_ptr, mem_ptr +target_mem_size);
+    printf(" - AiM physical address space: 0x%lx ~ 0x%lx\n", aim_pa, aim_pa + aim_mem_size);
+    printf(" - Target memory size(bytes):");
+	print_byte_size(target_mem_size);
 	
+	/* ------------------------------------------------------------
+	 * Tests
+	 * ------------------------------------------------------------
+	 */
+	 
+	memset(mem_ptr, 0, target_mem_size);
+    for (int i = 0; i < target_mem_size; i += sizeof(int)) {
+        int *addr = (int *)((char *)mem_ptr + i);
+        *addr = MAGIC_NUMBER;
+    }
+    for (int i = 0; i < target_mem_size; i += sizeof(int)) {
+        int *addr = (int *)((char *)mem_ptr + i);
+        int value_read = *addr;
+        
+        if (value_read == MAGIC_NUMBER) {
+            // printf("Data verification successful at address %p. Value read: 0x%X\n", addr, value_read);
+        } else {
+            printf("Index [%d]: Failed at address %p. Expected: 0x%X, Read: 0x%X\n", i, addr, MAGIC_NUMBER, value_read);
+			// break;
+        }
+    }
 	printf(" - Memory read/write PASS \n");
 
-    munmap(mem_ptr, aim_mem_size);
+    munmap(mem_ptr, target_mem_size);
     close(mem_fd);	
 	munmap(dev->maddr, dev->size);
 	close(dev->fd);

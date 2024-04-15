@@ -1,0 +1,16 @@
+
+PCI debug
+---------
+
+ - Accessing BAR4
+ - Region size is 8589934592-bytes
+ - PCI Physical Address: 0x6000000000
+
+Memory read/write test
+---------
+
+ - AiM memory size(bytes): 7.9961 GB
+ - AiM virtual address space: 0x7f96dd475000 ~ 0x7f971d475000
+ - AiM physical address space: 0x6000400000 ~ 0x6200000000
+ - Target memory size(bytes):1.0000 GB
+ - Memory read/write PASS 
