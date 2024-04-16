@@ -210,7 +210,7 @@ int main(int argc, char *argv[])
 	aim_pa = aim_pa_base + AIM_RESERVED_OFFSET;
 	aim_mem_size = (dev->size) - AIM_RESERVED_OFFSET;
 	// target_mem_size = aim_mem_size;
-	target_mem_size = 1024 * 1024 * 1024;
+	target_mem_size = 1 *  1024 * 1024;
 	
 
     mem_fd = open(MEM_DEVICE, O_RDWR | O_SYNC);
@@ -246,14 +246,14 @@ int main(int argc, char *argv[])
 	print_byte_size(aim_mem_size);
 	printf(" - AiM virtual address space: %p ~ %p\n", mem_ptr, mem_ptr +target_mem_size);
     printf(" - AiM physical address space: 0x%lx ~ 0x%lx\n", aim_pa, aim_pa + aim_mem_size);
-    printf(" - Target memory size(bytes):");
-	print_byte_size(target_mem_size);
+    // printf(" - Target memory size(bytes):");
+	// print_byte_size(target_mem_size);
 	
 	/* ------------------------------------------------------------
 	 * Tests
 	 * ------------------------------------------------------------
 	 */
-	 
+
 	memset(mem_ptr, 0, target_mem_size);
     for (int i = 0; i < target_mem_size; i += sizeof(int)) {
         int *addr = (int *)((char *)mem_ptr + i);
