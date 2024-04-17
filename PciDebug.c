@@ -12,6 +12,7 @@
 #include <byteswap.h>
 
 #include <sys/io.h>
+#include <errno.h>
 
 int verbosity = 3;
 
@@ -152,11 +153,13 @@ int main(int argc, char *argv[])
 		NULL,
 		(size_t)(dev->size),
 		PROT_READ|PROT_WRITE,
-		MAP_SHARED,
+		// MAP_SHARED,
+		MAP_PRIVATE,
 		dev->fd,
-		0);
+		// 0);
+		AIM_RESERVED_OFFSET);
 	if (dev->maddr == (unsigned char *)MAP_FAILED) {
-//		printf("failed (mmap returned MAP_FAILED)\n");
+        printf("errno: %d\n", errno);
 		printf("BARs that are I/O ports are not supported by this tool\n");
 		dev->maddr = 0;
 		close(dev->fd);
@@ -210,7 +213,7 @@ int main(int argc, char *argv[])
 	aim_pa = aim_pa_base + AIM_RESERVED_OFFSET;
 	aim_mem_size = (dev->size) - AIM_RESERVED_OFFSET;
 	// target_mem_size = aim_mem_size;
-	target_mem_size = 1 *  1024 * 1024;
+	target_mem_size = 1 * 1024;
 	
 
     mem_fd = open(MEM_DEVICE, O_RDWR | O_SYNC);
@@ -244,8 +247,8 @@ int main(int argc, char *argv[])
 	printf("---------\n\n");
 	printf(" - AiM memory size(bytes): ");
 	print_byte_size(aim_mem_size);
-	printf(" - AiM virtual address space: %p ~ %p\n", mem_ptr, mem_ptr +target_mem_size);
-    printf(" - AiM physical address space: 0x%lx ~ 0x%lx\n", aim_pa, aim_pa + aim_mem_size);
+	printf(" - AiM virtual address space: %p ~ %p\n", mem_ptr, mem_ptr + target_mem_size);
+    printf(" - AiM physical address space: 0x%lx ~ 0x%lx\n", aim_pa, aim_pa + target_mem_size);
     // printf(" - Target memory size(bytes):");
 	// print_byte_size(target_mem_size);
 	
@@ -256,15 +259,17 @@ int main(int argc, char *argv[])
 
 	memset(mem_ptr, 0, target_mem_size);
     for (int i = 0; i < target_mem_size; i += sizeof(int)) {
-        int *addr = (int *)((char *)mem_ptr + i);
+        // int *addr = (int *)((char *)mem_ptr + i);
+		int *addr = (int *)((char *)dev->maddr + i);
         *addr = MAGIC_NUMBER;
     }
     for (int i = 0; i < target_mem_size; i += sizeof(int)) {
-        int *addr = (int *)((char *)mem_ptr + i);
+        // int *addr = (int *)((char *)mem_ptr + i);
+		int *addr = (int *)((char *)dev->maddr + i);
         int value_read = *addr;
         
         if (value_read == MAGIC_NUMBER) {
-            // printf("Data verification successful at address %p. Value read: 0x%X\n", addr, value_read);
+            printf("Data verification successful at address %p. Value read: 0x%X\n", addr, value_read);
         } else {
             printf("Index [%d]: Failed at address %p. Expected: 0x%X, Read: 0x%X\n", i, addr, MAGIC_NUMBER, value_read);
 			// break;

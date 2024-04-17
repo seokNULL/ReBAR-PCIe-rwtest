@@ -1,0 +1,1 @@
+cmd_/home/sy/work/minipci/linux/driver/minipci.ko := ld -r  -m elf_x86_64 -z noexecstack   --build-id=sha1  -T scripts/module.lds -o /home/sy/work/minipci/linux/driver/minipci.ko /home/sy/work/minipci/linux/driver/minipci.o /home/sy/work/minipci/linux/driver/minipci.mod.o;  true
