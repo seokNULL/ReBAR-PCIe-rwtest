@@ -1,2 +1,2 @@
-/home/sy/work/minipci/linux/driver/main.o
+/home/sy/work/pcie_test/minipci/linux/driver/main.o
 

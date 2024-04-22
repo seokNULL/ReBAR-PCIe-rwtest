@@ -17,12 +17,13 @@
 // in 64-bit linux systems a long is a 64-bit type (sizeof(long)=8) !
 #define USE_MMAP
 // #define USE_READ_WRITE
-
 #define BAR_USAGE	( 4 )	/* default index of bar to use for test */
-
 #define OFFSET		( 0 )
 #define MAGIC_NUMBER (0xDEADBEEF)
-#define TEST_SIZE (4 * 1024 * 1024)
+#define AIM_RESERVED_OFFSET (0x00400000)
+// //30 - 1GB
+// #define MEMCPY_BIT 32
+// #define MEMCPY_SIZE (1 << MEMCPY_BIT)
 
 enum MPD_IOCTLS_tag
 {
@@ -40,7 +41,17 @@ void PrintDevBuf (void* DevPtr, unsigned long size){
     }
 
 }
+void print_byte_size(unsigned long value) {
+    const char *suffixes[] = {"B", "KB", "MB", "GB"};
+    double bytes = (double)value;
+    int suffix_index = 0;
 
+    while (bytes >= 1024 && suffix_index < 3) {
+        bytes /= 1024;
+        suffix_index++;
+    }
+    printf("%.4f %s\t", bytes, suffixes[suffix_index]);
+}
 
 int main()
 {
@@ -51,7 +62,10 @@ int main()
 	unsigned char *bufferSrc2 = NULL;
 	unsigned char *bufferDst2 = NULL;
 	void *bufferDev = NULL;
-	unsigned long humanReadableSize = TEST_SIZE;
+	// unsigned long humanReadableSize = TEST_SIZE;
+	// unsigned long memcpy_size = 0x100000000 - AIM_RESERVED_OFFSET; //4GB
+	unsigned long memcpy_size = 0x200000000 - AIM_RESERVED_OFFSET; //4GB
+
 	unsigned long ii, jj;
 	unsigned long rv;
 	unsigned long status = 0xfedcba9876543210;
@@ -69,19 +83,21 @@ int main()
 		exit( -1 );
 	}
 
-	printf( "* get infos from board\n" );
+	
 	rv = ioctl( fileHandle, MPD_GET_BAR_MASK, status );
-	printf( "  BARMask (%16.16lx): 0x%2.2lx\n", status, rv );
 	rv = ioctl( fileHandle, MPD_GET_BAR_MAX_INDEX, status );
-	printf( "  BARMaxIndex (%16.16lx): %ld\n", status, rv );
 	rv = ioctl( fileHandle, MPD_GET_BAR_MAX_NUM, status );
+	
+	printf( "* get infos from board\n" );
+	printf( "  BARMask (%16.16lx): 0x%2.2lx\n", status, rv );	
+	printf( "  BARMaxIndex (%16.16lx): %ld\n", status, rv );	
 	printf( "  BARMaxNum (%16.16lx): %ld\n", status, rv );
 
-	while ( humanReadableSize / 1024 > 0 )
-	{
-		u = ( ' ' == u ) ? 'k' : (( 'k' == u ) ? 'M' :  'G' );
-		humanReadableSize /= 1024;
-	}
+	// while ( humanReadableSize / 1024 > 0 )
+	// {
+	// 	u = ( ' ' == u ) ? 'k' : (( 'k' == u ) ? 'M' :  'G' );
+	// 	humanReadableSize /= 1024;
+	// }
 
 	printf( "* use BAR#%d\n", BAR_USAGE );
 	rv = ioctl( fileHandle, MPD_BAR_CHG, BAR_USAGE );
@@ -89,23 +105,25 @@ int main()
 
 #ifdef USE_MMAP
 	printf( "* map memory\n" );
-	// bufferDev = mmap( 0, TEST_SIZE, PROT_WRITE, MAP_SHARED, fileHandle, 0 );
-	bufferDev = mmap( 0, TEST_SIZE, PROT_WRITE, MAP_SHARED, fileHandle, 0x00400000);
+	// memcpy_size = 2 * 1024 * 1024 * 1024 ;
+	// bufferDev = mmap( 0, memcpy_size, PROT_WRITE, MAP_SHARED, fileHandle, 0 );
+	bufferDev = mmap( 0, memcpy_size, PROT_WRITE, MAP_PRIVATE, fileHandle, AIM_RESERVED_OFFSET);
 	if ( MAP_FAILED == bufferDev )
 	{
 		printf( "Mmap failed\n" );
 		exit( -1 );
 	}
 
-	memset( bufferDev, 0x00000000, TEST_SIZE );
-	// PrintDevBuf(bufferDev, TEST_SIZE);
-
-    for (int i = 0; i < TEST_SIZE; i += sizeof(int)) {
+	memset( bufferDev, 0x00000000, memcpy_size );
+	// PrintDevBuf(bufferDev, memcpy_size);
+	printf(" - Test memory size(bytes): ");
+	print_byte_size(memcpy_size);
+    for (int i = 0; i < memcpy_size; i += sizeof(int)) {
 		int *addr = (int *)((char *)bufferDev + i);
         *addr = MAGIC_NUMBER;
     }
 
-    for (int i = 0; i < TEST_SIZE; i += sizeof(int)) {
+    for (int i = 0; i < memcpy_size; i += sizeof(int)) {
 		int *addr = (int *)((char *)bufferDev + i);
         int value_read = *addr;
         
@@ -113,25 +131,26 @@ int main()
             // printf("Data verification successful at address %p. Value read: 0x%X\n", addr, value_read);
         } else {
             printf("Index [%d]: Failed at address %p. Expected: 0x%X, Read: 0x%X\n", i, addr, MAGIC_NUMBER, value_read);
-			// break;
+			break;
         }
     }
-	printf( "* Test passed, Size: %d\n" );
 
-	// PrintDevBuf(bufferDev, TEST_SIZE);
+	printf( "==> PASSED\n" );
+
+	// PrintDevBuf(bufferDev, memcpy_size);
 
 	// printf( "* write hardware\n" );
 	// startTime = clock();
-	// memcpy( bufferDev, bufferSrc, TEST_SIZE );
+	// memcpy( bufferDev, bufferSrc, memcpy_size );
 	// endTime = clock();
 	// finalTime = ( double ) ( endTime - startTime ) / CLOCKS_PER_SEC;
 	// printf( "Time: %.2lfsec., %.lfMB/s\n", finalTime, ( double ) TEST_SIZE_IN_MB / finalTime );	// hmmm: ~16MB/s
 	
-	// PrintDevBuf(bufferDev, TEST_SIZE);
+	// PrintDevBuf(bufferDev, memcpy_size);
 	
 	// startTime = clock();
 	// printf( "* read hardware\n" );
-	// memcpy( bufferDst, bufferDev, TEST_SIZE );
+	// memcpy( bufferDst, bufferDev, memcpy_size );
 	// endTime = clock();
 	// finalTime = ( double ) ( endTime - startTime ) / CLOCKS_PER_SEC;
 	// printf( "Time: %.2lfsec., %.lfMB/s\n", finalTime, ( double ) TEST_SIZE_IN_MB / finalTime );
@@ -158,4 +177,6 @@ int main()
 
 	printf( "* close file\n" );
 	close( fileHandle );
+
+	return 0;
 }
